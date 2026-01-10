@@ -236,39 +236,47 @@ Example P2P run:
 
 ```
 pqc_secure_file_transfer/
-├── benchmarks
+├── protocol/
+│   ├── messages.py        # Message formats (HELLO, HANDSHAKE, etc.)
+│   ├── state_machine.py   # Protocol states & transitions
+│   └── constants.py       # Versions, limits, enums
+│
+├── crypto/
+│   ├── kem.py             # ML-KEM wrapper (liboqs)
+│   ├── dsa.py             # ML-DSA wrapper (liboqs)
+│   ├── aead.py            # AES-256-GCM (cryptography)
+│   ├── kdf.py             # HKDF
+│   └── hash.py            # SHA-256
+│
+├── transport/
+│   └── tcp.py             # Async TCP transport
+│
+├── file_transfer/
+│   ├── chunking.py        # File chunk logic
+│   └── transfer.py        # Send/receive logic
+│
+├── peer/
+│   ├── initiator.py       # P2P initiator logic
+│   ├── responder.py       # P2P responder logic
+│   └── peer.py            # Unified peer entry
+│
+├── benchmarks/
 │   ├── handshake.py
 │   └── throughput.py
-├── crypto
-│   ├── aead.py
-│   ├── dsa.py
-│   ├── hash.py
-│   ├── kdf.py
-│   └── kem.py
-├── examples
-│   ├── receive_file.py
-│   └── send_file.py
-├── file_transfer
-│   ├── chunking.py
-│   └── transfer.py
-├── flow.txt
-├── peer
-│   ├── initiator.py
-│   ├── peer.py
-│   └── responder.py
-├── protocol
-│   ├── constants.py
-│   ├── messages.py
-│   └── state_machine.py
-├── pyproject.toml
+│
+├── tests/
+│   ├── test_handshake.py
+│   ├── test_replay.py
+│   └── test_file_integrity.py
+│
+├── examples/
+│   ├── send_file.py
+│   └── receive_file.py
+│
+├── flow.txt               # Protocol flow diagram
 ├── README.md
 ├── requirements.txt
-├── tests
-│   ├── test_file_integrity.py
-│   ├── test_handshake.py
-│   └── test_replay.py
-└── transport
-    └── tcp.py
+└── pyproject.toml
 ```
 
 ---
