@@ -51,8 +51,8 @@ The system is **protocol-driven**, not just a secure application: message format
 
 | Purpose              | Algorithm   |
 | -------------------- | ----------- |
-| Key Exchange         | ML-KEM-512  |
-| Authentication       | ML-DSA      |
+| Key Exchange         | ML-KEM-768  |
+| Authentication       | ML-DSA-65   |
 | Symmetric Encryption | AES-256-GCM |
 | Key Derivation       | HKDF-SHA256 |
 | Hashing              | SHA-256     |
@@ -76,15 +76,15 @@ Roles are symmetric and exist only for the duration of the session.
 
 ```
 Initiator                          Responder
-   |--------- HELLO --------------->|
-   |<------ HELLO_ACK --------------|
-   |----- PQC_HANDSHAKE ------------>|
-   |<-- PQC_HANDSHAKE_RESP ----------|
+   |--------- HELLO --------------------->|
+   |<------ HELLO_ACK --------------------|
+   |----- PQC_HANDSHAKE ----------------->|
+   |<-- PQC_HANDSHAKE_RESP ---------------|
    |===== SECURE CHANNEL ESTABLISHED =====|
-   |------ FILE_META -------------->|
-   |<----- META_ACK ----------------|
-   |------ FILE_CHUNKS ------------>|
-   |<----- TRANSFER_OK -------------|
+   |------ FILE_META -------------------->|
+   |<----- META_ACK ----------------------|
+   |------ FILE_CHUNKS ------------------>|
+   |<----- TRANSFER_OK -------------------|
 ```
 
 ---
