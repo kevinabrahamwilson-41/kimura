@@ -236,29 +236,39 @@ Example P2P run:
 
 ```
 pqc_secure_file_transfer/
-├── aes_gcm/                # AES-GCM implementation
-├── benchmarks/             # Crypto and protocol benchmarks
-├── docker/                 # Containerized build environment
-├── examples/               # Example P2P usage
-├── include/
-│   └── pqc/
-│       ├── kem/            # ML-KEM abstraction
-│       ├── dsa/            # ML-DSA abstraction
-│       ├── aead/           # AEAD interface
-│       ├── protocol/       # Protocol message definitions
-│       └── transport/      # TCP abstraction
-├── keys/                   # Identity keys (dev/testing)
-├── src/
-│   ├── crypto/             # Crypto glue code
-│   ├── protocol/           # Handshake & state machine
-│   ├── transport/          # TCP/P2P networking
-│   ├── file/               # Chunking & file logic
-│   └── main.cpp            # Peer entry point
-├── tests/                  # Unit & integration tests
-├── flow.txt                # Protocol flow diagram
-├── CMakeLists.txt
-├── LICENSE
-└── README.md
+├── benchmarks
+│   ├── handshake.py
+│   └── throughput.py
+├── crypto
+│   ├── aead.py
+│   ├── dsa.py
+│   ├── hash.py
+│   ├── kdf.py
+│   └── kem.py
+├── examples
+│   ├── receive_file.py
+│   └── send_file.py
+├── file_transfer
+│   ├── chunking.py
+│   └── transfer.py
+├── flow.txt
+├── peer
+│   ├── initiator.py
+│   ├── peer.py
+│   └── responder.py
+├── protocol
+│   ├── constants.py
+│   ├── messages.py
+│   └── state_machine.py
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+├── tests
+│   ├── test_file_integrity.py
+│   ├── test_handshake.py
+│   └── test_replay.py
+└── transport
+    └── tcp.py
 ```
 
 ---
