@@ -288,3 +288,25 @@ Before you say “done”:
 
 ---
 Always pass bytes, not string or int, to crypto primitives.
+
+
+Server shows:
+
+text
+$ pqc-session server --port 8443 --dataset cifar10 --key ~/.pqc/server_key
+[2026-01-11 14:54] Listening on 0.0.0.0:8443
+[2026-01-11 14:55] Client gpu-01 connected (PQC handshake OK)
+[2026-01-11 14:55] Client gpu-02 connected (PQC handshake OK)
+[2026-01-11 14:55] ✓ All 10 clients connected. Channel established.
+[2026-01-11 14:55] ✓ Ready for federated training transfer.
+Round 1/100: Broadcasting CIFAR10 model (2.1MB)...
+
+Each Client shows:
+
+text
+$ pqc-session client trainer:8443 --gpu 0 --key ~/.pqc/client_key
+[2026-01-11 14:55] Connecting to trainer.example.com:8443
+[2026-01-11 14:55] ✓ PQC Handshake complete (ML-KEM-1024)
+[2026-01-11 14:55] ✓ Secure channel established.
+[2026-01-11 14:55] ✓ Ready for training transfer.
+Round 1/100: Received model, training on GPU 0...

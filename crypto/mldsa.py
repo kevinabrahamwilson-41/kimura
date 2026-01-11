@@ -104,7 +104,7 @@ class MLDSA:
         """
         Verify hybrid signature.
         """
-        ml_dsa_len = MLDSA("ML-DSA-44").max_signature_len  # Fixed for example
+        ml_dsa_len = MLDSA("ML-DSA-65").max_signature_len  # Fixed for example
         ml_dsa_sig = hybrid_sig[:ml_dsa_len]
         rsa_sig = hybrid_sig[ml_dsa_len:]
         
