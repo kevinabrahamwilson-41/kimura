@@ -5,7 +5,8 @@ import os
 import sys
 import asyncio
 from pathlib import Path
-
+from transport.tcp import TCPTransport
+from protocol.constants import ML_DSA_65_SIG_LEN
 # Fix imports for YOUR project structure
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.dirname(__file__))
@@ -19,14 +20,19 @@ from protocol.messages import (
     serialize_handshake_resp,
     parse_handshake_init
 )
+from crypto.signing import (
+    ensure_keys_exist, 
+    load_mlkem_client_keys, load_mlkem_server_keys, 
+    load_mldsa_client_keys, load_mldsa_server_keys,
+    sign_message, verify_message, hash_file  
+)
+
 from file_transfer.transfer import (
     send_length_prefixed,
     recv_length_prefixed,
     send_file,
     recv_file
 )
-from crypto.keygen import load_persistent_keys
-
 logger = logging.getLogger(__name__)
 
 class TransferState(Enum):
@@ -41,20 +47,45 @@ class TransferState(Enum):
 class ProtocolError(Exception):
     pass
 
+
 class StateMachine:
-    def __init__(self, key_path: str, role: str):
+    def __init__(self, key_path: str, role: str, signing_key: Optional[bytes] = None):
         self.state = TransferState.INIT
         self.role = role
         self.key_path = key_path
+
         self.session_key: Optional[bytes] = None
         self.aead_ctx: Optional[AEADContext] = None
         self.kem: Optional[MLKEM] = None
         self.kem_public_key: Optional[bytes] = None
         self.kem_secret_key: Optional[bytes] = None
-        
-        # LOAD YOUR PERSISTENT KEYS FROM ./keys/
-        self.kem_public_key, self.kem_secret_key = load_persistent_keys(key_path)
+        self.ml_dsa_public_key: Optional[bytes] = None
+        self.ml_dsa_secret_key: Optional[bytes] = None
+        self.signing_key: Optional[bytes] = None
+        self.peer_kem_public_key: Optional[bytes] = None  
+        self.peer_ml_dsa_public_key: Optional[bytes] = None
+
+        ensure_keys_exist(key_path, role)
+
+        if role == "server":
+            self.kem_public_key, self.kem_secret_key = load_mlkem_server_keys(key_path)
+            self.ml_dsa_public_key, self.ml_dsa_secret_key = load_mldsa_server_keys(key_path)
+        elif role == "client":
+            self.kem_public_key, self.kem_secret_key = load_mlkem_client_keys(key_path)
+            self.ml_dsa_public_key, self.ml_dsa_secret_key = load_mldsa_client_keys(key_path)
+        else:
+            raise ValueError("role must be 'server' or 'client'")
+
+        # 3. Signing key
+        self.signing_key = self.ml_dsa_secret_key if signing_key is None else signing_key
+
+        # 4. Initialize KEM
         self.kem = MLKEM("ML-KEM-768")
+
+        
+        # Initialize KEM object (unchanged)
+        self.kem = MLKEM("ML-KEM-768")
+
 
     async def transition(self, event: str, reader=None, writer=None, **kwargs) -> None:
         """🚀 MAIN FUNCTION: Call this from manager.py with event strings."""
@@ -84,53 +115,101 @@ class StateMachine:
         await transitions[self.state][event](reader, writer, **kwargs)
 
     async def _client_send_handshake(self, reader, writer, **kwargs):
-        """CLIENT: Send OWN ML-KEM public key (loaded from keys/)."""
-        handshake_msg = serialize_handshake_init(self.kem_public_key)
-        await send_length_prefixed(writer, handshake_msg)
+        # Send EXACT key bytes only (no slicing issues)
+        message_to_sign = self.kem_public_key + self.ml_dsa_public_key
+        print(f"🔍 CLIENT: Sending PK={len(self.kem_public_key)}, DSA={len(self.ml_dsa_public_key)}")
+        
+        signature = sign_message(message_to_sign, self.ml_dsa_secret_key)
+        full_message = message_to_sign + signature
+        await send_length_prefixed(writer, full_message)
+        
         self.state = TransferState.HANDSHAKE_SENT
-        logger.info("✅ CLIENT: PK sent")
+        logger.info("✅ CLIENT: Signed PK+DSA sent")
 
     async def _server_recv_handshake(self, reader, writer, **kwargs):
-        """SERVER: Receive CLIENT's ML-KEM public key."""
-        handshake_msg = await recv_length_prefixed(reader)
-        self.kem_public_key = parse_handshake_init(handshake_msg)  # Store CLIENT PK
+        print("🔍 SERVER: Receiving client handshake...")
+        data = await recv_length_prefixed(reader)
+        print(f"🔍 SERVER: Got {len(data)} bytes")
+        
+        signature = data[-ML_DSA_65_SIG_LEN:]
+        body = data[:-ML_DSA_65_SIG_LEN]
+        print(f"🔍 SERVER: body={len(body)}, sig={len(signature)}")
+        
+        # ✅ CRITICAL: Use ACTUAL key lengths from loaded keys
+        client_kem_pk = body[:len(self.kem_public_key)]      # Match server KEM size
+        client_dsa_pk = body[len(self.kem_public_key):len(self.kem_public_key)+len(self.ml_dsa_public_key)]
+        
+        print(f"🔍 SERVER: PK={len(client_kem_pk)}, DSA={len(client_dsa_pk)}")
+        
+        if not verify_message(body, signature, client_dsa_pk):
+            print("🔍 SERVER: Signature verification FAILED")
+            self._error("❌ Client signature invalid")
+        
+        self.peer_kem_public_key = client_kem_pk
+        self.peer_ml_dsa_public_key = client_dsa_pk
         self.state = TransferState.HANDSHAKE_RECV
-        logger.info("✅ SERVER: Client PK received")
+        print("🔍 SERVER: Ready to send response!")
+        logger.info("✅ SERVER: Client signature verified")
 
     async def _client_recv_response(self, reader, writer, **kwargs):
-        """CLIENT: Receive server ML-KEM ciphertext → derive session key."""
-        resp = await recv_length_prefixed(reader)
-        ciphertext = parse_handshake_resp(resp)
+        """CLIENT: Receive+VERIFY server's signed ciphertext."""
+        data = await recv_length_prefixed(reader)
+        
+        # Parse: [response][signature]
+        resp_msg = data[:-ML_DSA_65_SIG_LEN]
+        signature = data[-ML_DSA_65_SIG_LEN:]
+        # 🔥 VERIFY using SERVER's ML-DSA public key
+        server_dsa_pk, _ = load_mldsa_server_keys(self.key_path)
+        if not verify_message(resp_msg, signature, server_dsa_pk):
+            self._error("❌ Server response signature invalid")
+        
+        ciphertext = parse_handshake_resp(resp_msg)
         shared_secret = self.kem.decaps(ciphertext, self.kem_secret_key)
         self.session_key = hkdf_sha256(shared_secret, b"", b"pqc_session_v1", 32)
         self.aead_ctx = AEADContext(self.session_key)
+        self.peer_ml_dsa_public_key = server_dsa_pk
         self.state = TransferState.HANDSHAKE_COMPLETE
-        logger.info("✅ CLIENT: PQC handshake complete!")
+        logger.info("✅ CLIENT: Signed handshake complete!")
 
     async def _server_send_response(self, reader, writer, **kwargs):
-        """SERVER: Encapsulate using CLIENT's PK → send ciphertext."""
-        ciphertext, shared_secret = self.kem.encaps(self.kem_public_key)
+        """SERVER: Sign+send ciphertext using CLIENT's PK."""
+        ciphertext, shared_secret = self.kem.encaps(self.peer_kem_public_key)
         self.session_key = hkdf_sha256(shared_secret, b"", b"pqc_session_v1", 32)
         self.aead_ctx = AEADContext(self.session_key)
-        
         resp_msg = serialize_handshake_resp(ciphertext)
-        await send_length_prefixed(writer, resp_msg)
+        signature = sign_message(resp_msg, self.ml_dsa_secret_key)  # Sign CT
+        # Send: [response][signature]
+        await send_length_prefixed(writer, resp_msg + signature)
         self.state = TransferState.HANDSHAKE_COMPLETE
-        logger.info("✅ SERVER: PQC handshake complete!")
+        logger.info("✅ SERVER: Signed handshake complete!")
 
     async def _start_send_file(self, reader, writer, filepath: str):
-        """CLIENT: Start encrypted file transfer (uses your transfer.py)."""
+        """CLIENT: Send file_hash + signature + encrypted_file."""
         if not self.aead_ctx:
             self._error("No AEAD context")
+        
+        # 🔥 Hash + sign file
+        file_hash = hash_file(Path(filepath))
+        signature = sign_message(file_hash, self.ml_dsa_secret_key)
+        
+        # Send: [32-byte-hash][2420-byte-sig][encrypted_file]
+        await send_length_prefixed(writer, file_hash + signature)
         await send_file(writer, Path(filepath), self.aead_ctx)
-        logger.info("✅ CLIENT: File sent")
+        logger.info("✅ CLIENT: Signed file sent")
 
     async def _start_recv_file(self, reader, writer, output_path: str):
-        """SERVER: Receive encrypted file (uses your transfer.py)."""
+        """SERVER: Receive+VERIFY file_hash + signature + encrypted_file."""
         if not self.aead_ctx:
             self._error("No AEAD context")
+        metadata = await recv_length_prefixed(reader)
+        file_hash = metadata[:32]      # SHA256 digest
+        signature = metadata[32:]      # ML-DSA signature
+        # VERIFY signature using CLIENT's public key
+        if not verify_message(file_hash, signature, self.peer_ml_dsa_public_key):
+            self._error("❌ File signature invalid")
+        # Receive encrypted file
         await recv_file(reader, writer, Path(output_path), self.aead_ctx)
-        logger.info("✅ SERVER: File received")
+        logger.info("✅ SERVER: Verified file received")
 
     def _error(self, reason: str):
         self.state = TransferState.ERROR

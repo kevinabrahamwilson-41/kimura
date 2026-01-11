@@ -1,17 +1,27 @@
 # session/client.py
 import asyncio
-import logging
+from pathlib import Path
 from .manager import SessionManager
 
-class FederatedClient(SessionManager):
-    def __init__(self, gpu_id: int, key_path: str):
-        super().__init__("client", key_path)
-        self.gpu_id = gpu_id
-    
-    async def run(self, host: str):
-        await self.establish_channel()
+class PQCClient:
+    def __init__(self, key_path: str, file_path: str):
+        self.key_path = Path(key_path)
+        self.file_path = Path(file_path)
         
-        # Training loop
-        while True:
-            logging.info(f"Round X/100: Received model, training on GPU {self.gpu_id}...")
-            await asyncio.sleep(5)  # Simulate local training
+    async def connect_and_send(self, host: str, port: int = 8443):
+        """Connect to PQC server and send file"""
+        print(f"🚀 PQC Client connecting to {host}:{port}...")
+        
+        try:
+            # Create SessionManager for this connection
+            mgr = SessionManager("client", str(self.key_path), str(self.file_path))
+            
+            # Connect and do full PQC handshake + file transfer
+            await mgr.establish_channel(host, port)
+            await mgr.send_file(str(self.file_path))
+            print(f"✅ CLIENT: '{self.file_path.name}' sent successfully!")
+            
+        except Exception as e:
+            print(f"❌ Client error: {e}")
+        finally:
+            await mgr.close()

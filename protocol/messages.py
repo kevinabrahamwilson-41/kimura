@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from crypto.mlkem import MLKEM           
 from crypto.kdf import hkdf_sha256      
 from crypto.aead import AEADContext    
-from constants import (
+from protocol.constants import (
     MSG_HANDSHAKE_INIT,
     MSG_HANDSHAKE_RESP,
     MSG_FILE_CHUNK,
@@ -18,11 +18,19 @@ from constants import (
     HEADER_FORMAT,
     HEADER_SIZE
 )
-def serialize_handshake_init(kem_public_key: bytes) -> bytes:
-    """Client→Server: [1B type][2B kem_id][2B pk_len][public_key]"""
-    kem_id = 1  # ML-KEM-768
-    pk_len = len(kem_public_key)
-    return struct.pack('>BHH', MSG_HANDSHAKE_INIT, kem_id, pk_len) + kem_public_key
+
+def serialize_handshake_init(kem_pk: bytes, client_sig: bytes) -> bytes:  # ADD SIG PARAM
+    kem_id = 1
+    pk_len = len(kem_pk)
+    sig_len = len(client_sig)  # ML-DSA-65 = 2420 bytes typically
+    return (struct.pack('>BHHH', MSG_HANDSHAKE_INIT, kem_id, pk_len, sig_len)  # 1+2+2+2
+            + kem_pk + client_sig)
+
+def parse_handshake_init(data: bytes) -> tuple[bytes, bytes]:
+    msg_type, kem_id, pk_len, sig_len = struct.unpack('>BHHH', data[:7])
+    pk_end = 7 + pk_len
+    return data[7:pk_end], data[pk_end:pk_end+sig_len]  # RETURNS (PK, SIG) ✓
+
 
 def parse_handshake_init(data: bytes) -> bytes:
     """Extract KEM public key."""

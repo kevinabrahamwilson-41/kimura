@@ -13,7 +13,7 @@ MLKEM_VARIANT = "ML-KEM-768"  # NIST standard
 MLDSA_VARIANT = "ML-DSA-65"   # NIST standard  
 SESSION_KEY_LEN = 32          # AES-256
 NONCE_LEN = 12                # AES-GCM
-
+ML_DSA_65_SIG_LEN = 3309    # Signature length for ML-DSA-65
 # Protocol messages
 MSG_HANDSHAKE_INIT = 0x01
 MSG_HANDSHAKE_RESP = 0x02

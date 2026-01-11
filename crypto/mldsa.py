@@ -16,13 +16,13 @@ class MLDSA:
     Provides keygen, sign, verify. Bytes-only API with optional hybrid RSA fallback.
     
     Usage:
-        sig = MLDSA("ML-DSA-44")
+        sig = MLDSA("ML-DSA-65")
         public_key, secret_key = sig.keygen()
         signature = sig.sign(b"message", secret_key)
         valid = sig.verify(b"message", signature, public_key)
     """
     
-    def __init__(self, alg: str = "ML-DSA-44"):
+    def __init__(self, alg: str = "ML-DSA-65"):
         """
         Initialize with ML-DSA algorithm.
         
@@ -109,7 +109,7 @@ class MLDSA:
         rsa_sig = hybrid_sig[ml_dsa_len:]
         
         # Verify ML-DSA
-        sig = MLDSA("ML-DSA-44")
+        sig = MLDSA("ML-DSA-65")
         if not sig.verify(message, ml_dsa_sig, ml_dsa_public_key):
             return False
         
@@ -130,7 +130,7 @@ class MLDSA:
 
 # Production usage example
 def example():
-    sig = MLDSA("ML-DSA-44")
+    sig = MLDSA("65")
     
     # Keygen
     pk, sk = sig.keygen()

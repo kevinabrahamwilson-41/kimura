@@ -1,44 +1,110 @@
-from .mlkem import MLKEM
+# crypto/keygen.py
+from crypto.mlkem import MLKEM
+from crypto.mldsa import MLDSA
 from pathlib import Path
 
-def generate_persistent_keys(key_name: str, role: str = "server"):
-    """Generate and STORE ML-KEM keys in ./keys/."""
+
+# ========== ML-KEM FUNCTIONS (Server + Client) ==========
+def generate_mlkem_server_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Generate ML-KEM keys for SERVER only."""
     kem = MLKEM("ML-KEM-768")
-    pk, sk = kem.keygen()
-
-    key_dir = Path("keys")
-    key_dir.mkdir(exist_ok=True)
-    key_path = key_dir / f"{role}.pem"
-
-    # SAFE binary format: [4-byte pk length][pk][sk]
-    with open(key_path, "wb") as f:
-        f.write(len(pk).to_bytes(4, "big"))
-        f.write(pk)
-        f.write(sk)
-
-    print(f"✅ {role.capitalize()} keys stored: {key_path}")
-    return pk, sk
+    kem_pk, kem_sk = kem.keygen()
+    
+    Path(key_dir).mkdir(exist_ok=True)
+    key_data = len(kem_pk).to_bytes(4, "big") + kem_pk + kem_sk
+    
+    with open(Path(key_dir) / "server_mlkem.pem", "wb") as f:
+        f.write(key_data)
+    
+    print("✅ Server ML-KEM keys: keys/server_mlkem.pem")
+    return kem_pk, kem_sk
 
 
-def load_persistent_keys(key_path: str, role: str = "server"):
-    """Load ML-KEM keys from key_path/."""
-    key_dir = Path(key_path)
-    key_path_full = key_dir / f"{role}.pem"
+def generate_mlkem_client_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Generate ML-KEM keys for CLIENT only."""
+    kem = MLKEM("ML-KEM-768")
+    kem_pk, kem_sk = kem.keygen()
+    
+    Path(key_dir).mkdir(exist_ok=True)
+    key_data = len(kem_pk).to_bytes(4, "big") + kem_pk + kem_sk
+    
+    with open(Path(key_dir) / "client_mlkem.pem", "wb") as f:
+        f.write(key_data)
+    
+    print("✅ Client ML-KEM keys: keys/client_mlkem.pem")
+    return kem_pk, kem_sk
 
-    if not key_path_full.exists():
-        raise FileNotFoundError(f"Key not found: {key_path_full}")
 
-    with open(key_path_full, "rb") as f:
-        pk_len_bytes = f.read(4)
-        if len(pk_len_bytes) != 4:
-            raise ValueError("Invalid key file (missing length header)")
+def load_mlkem_server_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Load ML-KEM server keys."""
+    with open(Path(key_dir) / "server_mlkem.pem", "rb") as f:
+        pk_len = int.from_bytes(f.read(4), "big")
+        kem_pk = f.read(pk_len)
+        kem_sk = f.read()
+    
+    print("✅ Loaded server ML-KEM keys")
+    return kem_pk, kem_sk
 
-        pk_len = int.from_bytes(pk_len_bytes, "big")
-        pk = f.read(pk_len)
-        sk = f.read()
 
-        if not pk or not sk:
-            raise ValueError("Invalid key file (truncated keys)")
+def load_mlkem_client_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Load ML-KEM client keys."""
+    with open(Path(key_dir) / "client_mlkem.pem", "rb") as f:
+        pk_len = int.from_bytes(f.read(4), "big")
+        kem_pk = f.read(pk_len)
+        kem_sk = f.read()
+    
+    print("✅ Loaded client ML-KEM keys")
+    return kem_pk, kem_sk
 
-    print(f"✅ Keys loaded: {key_path_full}")
-    return pk, sk
+
+# ========== ML-DSA FUNCTIONS (Server + Client) ==========
+def generate_mldsa_server_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Generate ML-DSA keys for SERVER (to verify client signatures)."""
+    mldsig = MLDSA("ML-DSA-65")
+    dsa_pk, dsa_sk = mldsig.keygen()
+    
+    Path(key_dir).mkdir(exist_ok=True)
+    key_data = len(dsa_pk).to_bytes(4, "big") + dsa_pk + dsa_sk
+    
+    with open(Path(key_dir) / "server_mldsa.pem", "wb") as f:
+        f.write(key_data)
+    
+    print("✅ Server ML-DSA keys: keys/server_mldsa.pem")
+    return dsa_pk, dsa_sk
+
+
+def generate_mldsa_client_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Generate ML-DSA keys for CLIENT (to verify server signatures)."""
+    mldsig = MLDSA("ML-DSA-65")
+    dsa_pk, dsa_sk = mldsig.keygen()
+    
+    Path(key_dir).mkdir(exist_ok=True)
+    key_data = len(dsa_pk).to_bytes(4, "big") + dsa_pk + dsa_sk
+    
+    with open(Path(key_dir) / "client_mldsa.pem", "wb") as f:
+        f.write(key_data)
+    
+    print("✅ Client ML-DSA keys: keys/client_mldsa.pem")
+    return dsa_pk, dsa_sk
+
+
+def load_mldsa_server_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Load ML-DSA server keys."""
+    with open(Path(key_dir) / "server_mldsa.pem", "rb") as f:
+        pk_len = int.from_bytes(f.read(4), "big")
+        dsa_pk = f.read(pk_len)
+        dsa_sk = f.read()
+    
+    print("✅ Loaded server ML-DSA keys")
+    return dsa_pk, dsa_sk
+
+
+def load_mldsa_client_keys(key_dir: str = "keys") -> tuple[bytes, bytes]:
+    """Load ML-DSA client keys."""
+    with open(Path(key_dir) / "client_mldsa.pem", "rb") as f:
+        pk_len = int.from_bytes(f.read(4), "big")
+        dsa_pk = f.read(pk_len)
+        dsa_sk = f.read()
+    
+    print("✅ Loaded client ML-DSA keys")
+    return dsa_pk, dsa_sk
