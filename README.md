@@ -1,14 +1,14 @@
-# PQC Secure P2P File Transfer Protocol
+# PQC Secure Centralised File Transfer Protocol
 
-> **Post-Quantum Secure, Peer-to-Peer File Transfer Protocol**
+> **Post-Quantum Secure, Centralised File Transfer Protocol**
 
-A fully peer-to-peer file transfer protocol designed to remain secure against classical and quantum adversaries. The protocol combines post-quantum cryptography for authentication and key exchange with high-performance symmetric encryption for data transfer.
+A fully centralised file transfer protocol designed to remain secure against classical and quantum adversaries. The protocol combines post-quantum cryptography for authentication and key exchange with high-performance symmetric encryption for data transfer.
 
 ---
 
 ## 1. Overview
 
-This project implements a **Post-Quantum Secure Peer-to-Peer (P2P) File Transfer Protocol** that enables two peers to securely exchange files over an untrusted network.
+This project implements a **Post-Quantum Secure Centralised File Transfer Protocol** that enables two peers to securely exchange files over an untrusted network.
 
 Unlike traditional TLS-based systems, this protocol is designed from the ground up using **NIST-selected post-quantum primitives**, making it resistant to both classical and quantum attacks.
 
@@ -22,7 +22,7 @@ The system is **protocol-driven**, not just a secure application: message format
 * Post-quantum mutual authentication
 * Forward secrecy
 * Replay protection
-* Fully peer-to-peer (no permanent server)
+* Fully Centralised
 * Transport-agnostic (currently TCP)
 * Modular cryptographic backend
 * High-performance encrypted file transfer
@@ -63,7 +63,7 @@ All cryptographic components are isolated into dedicated modules to allow future
 
 ## 5. Protocol Roles
 
-Although the system is peer-to-peer, each session defines temporary roles:
+Although the system is centralised, each session defines temporary roles:
 
 * **Initiator (I)** – Peer that starts the connection
 * **Responder (R)** – Peer that accepts the connection
