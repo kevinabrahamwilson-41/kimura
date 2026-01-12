@@ -31,7 +31,6 @@ def parse_handshake_init(data: bytes) -> tuple[bytes, bytes]:
     pk_end = 7 + pk_len
     return data[7:pk_end], data[pk_end:pk_end+sig_len]  # RETURNS (PK, SIG) ✓
 
-
 def parse_handshake_init(data: bytes) -> bytes:
     """Extract KEM public key."""
     msg_type, kem_id, pk_len = struct.unpack('>BHH', data[:5])
@@ -65,7 +64,6 @@ def serialize_file_chunk(chunk_data: bytes, aead_ctx: AEADContext) -> bytes:
     nonce = aead_ctx.generate_nonce()
     ciphertext = aead_ctx.encrypt(chunk_data, nonce)
     chunk_len = len(ciphertext)
-
     header = struct.pack(HEADER_FORMAT, PROTOCOL_VERSION, MSG_FILE_CHUNK, chunk_len)
     return header + nonce + ciphertext
 
@@ -77,14 +75,11 @@ def parse_file_chunk(data: bytes, aead_ctx: AEADContext) -> bytes:
     """
     header = data[:HEADER_SIZE]
     version, msg_type, chunk_len = struct.unpack(HEADER_FORMAT, header)
-
     if version != PROTOCOL_VERSION:
         raise ValueError(f"Unsupported protocol version {version}")
     if msg_type != MSG_FILE_CHUNK:
         raise ValueError(f"Unexpected message type {msg_type}")
-
     nonce = data[HEADER_SIZE:HEADER_SIZE+NONCE_LEN]
     ciphertext = data[HEADER_SIZE+NONCE_LEN:HEADER_SIZE+NONCE_LEN+chunk_len]
-
     return aead_ctx.decrypt(ciphertext, nonce)
 

@@ -4,12 +4,9 @@
 import asyncio
 from typing import Tuple, Optional
 import logging
-
 logger = logging.getLogger(__name__)
-
 class TCPTransport:
     """High-level TCP transport abstraction."""
-    
     @staticmethod
     async def connect(host: str, port: int, timeout: float = 30.0) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Connect to TCP server w/ timeout."""
@@ -19,7 +16,7 @@ class TCPTransport:
                 timeout=timeout
             )
             addr = writer.get_extra_info('peername')
-            logger.info(f"✅ Connected to {addr}")
+            logger.info(f"Connected to {addr}")
             return reader, writer
         except asyncio.TimeoutError:
             raise ConnectionError(f"Timeout connecting to {host}:{port}")
@@ -29,7 +26,7 @@ class TCPTransport:
         """Start TCP server."""
         server = await asyncio.start_server(handler, host, port, backlog=backlog)
         addr = server.sockets[0].getsockname()
-        logger.info(f"🚀 TCP Server listening on {addr}")
+        logger.info(f"TCP Server listening on {addr}")
         return server
     
     @staticmethod
@@ -81,28 +78,3 @@ class TCPServer:
             self.server.close()
             await self.server.wait_closed()
 
-# Production usage examples
-async def example_client():
-    """Example client usage."""
-    async with TCPConnection("127.0.0.1", 12345) as (reader, writer):
-        writer.write(b"HELLO")
-        await writer.drain()
-        data = await reader.read(1024)
-        print(f"Received: {data}")
-
-async def example_server():
-    """Example server usage."""
-    async def handle_client(reader, writer):
-        data = await reader.read(1024)
-        addr = writer.get_extra_info('peername')
-        print(f"[{addr}] {data}")
-        writer.write(data)  # Echo
-        await writer.drain()
-        writer.close()
-        await writer.wait_closed()
-    
-    async with TCPServer("0.0.0.0", 12345, handle_client):
-        await asyncio.sleep(3600)  # Run 1hr
-
-if __name__ == "__main__":
-    asyncio.run(example_client())  # Test client only

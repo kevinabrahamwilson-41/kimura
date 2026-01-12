@@ -1,27 +1,52 @@
-# session/client.py
 import asyncio
-from pathlib import Path
 from .manager import SessionManager
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 
 class PQCClient:
-    def __init__(self, key_path: str, file_path: str):
-        self.key_path = Path(key_path)
-        self.file_path = Path(file_path)
+    def __init__(self, key_path: str, file_path: str = None):  # Make file_path optional
+        self.key_path = key_path
+        self.file_path = file_path
+        self.mgr = None
+        self.on_weights_received = None  # 🔥 NEW: FL callback
         
     async def connect_and_send(self, host: str, port: int = 8443):
-        """Connect to PQC server and send file"""
-        print(f"🚀 PQC Client connecting to {host}:{port}...")
-        
+        """✅ KEEP EXISTING - file transfer mode"""
+        self.mgr = SessionManager("client", self.key_path)
         try:
-            # Create SessionManager for this connection
-            mgr = SessionManager("client", str(self.key_path), str(self.file_path))
-            
-            # Connect and do full PQC handshake + file transfer
-            await mgr.establish_channel(host, port)
-            await mgr.send_file(str(self.file_path))
-            print(f"✅ CLIENT: '{self.file_path.name}' sent successfully!")
-            
-        except Exception as e:
-            print(f"❌ Client error: {e}")
+            await self.mgr.establish_channel(host=host, port=port)
+            if self.file_path:
+                await self.mgr.send_file(str(self.file_path))
         finally:
-            await mgr.close()
+            await self.mgr.close()
+    
+    # 🔥 NEW: FL PERSISTENT MODE (doesn't close connection)
+    async def connect_fl(self, host: str, port: int = 8443):
+        """FL mode: Persistent bidirectional channel"""
+        self.mgr = SessionManager("client", self.key_path)
+        await self.mgr.establish_channel(host=host, port=port)
+        
+        # Start FL loop in background
+        asyncio.create_task(self._fl_loop())
+    
+    async def send_weights(self, weights: bytes):
+        """🔥 NEW: Send weights over existing channel"""
+        if self.mgr:
+            # You'll add this to SessionManager later
+            await self.mgr.send_data(weights)
+    
+    def set_weights_callback(self, callback):
+        """🔥 NEW: Callback when server sends weights"""
+        self.on_weights_received = callback
+    
+    async def _fl_loop(self):
+        """🔥 Internal FL bidirectional loop"""
+        while True:
+            try:
+                # Receive from server
+                weights = await self.mgr.recv_data()  # You'll add this
+                if self.on_weights_received:
+                    trained = await self.on_weights_received(weights)
+                    await self.send_weights(trained)
+            except:
+                break

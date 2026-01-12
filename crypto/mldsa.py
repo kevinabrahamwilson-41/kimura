@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 import oqs
 import os
 from typing import Tuple, Optional
@@ -5,7 +7,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, PrivateFormat, NoEncryption
 import logging
-
 logger = logging.getLogger(__name__)
 
 class MLDSA:
@@ -127,23 +128,3 @@ class MLDSA:
             return True
         except:
             return False
-
-# Production usage example
-def example():
-    sig = MLDSA("65")
-    
-    # Keygen
-    pk, sk = sig.keygen()
-    print(f"PK len: {len(pk)}, SK len: {len(sk)}")
-    
-    # Sign/Verify
-    message = b"PQC Secure File Transfer - ML-DSA!"
-    signature = sig.sign(message, sk)
-    valid = sig.verify(message, signature, pk)
-    print(f"Signature valid: {valid}")
-    print(f"Sig len: {len(signature)}")
-    
-    assert valid
-
-if __name__ == "__main__":
-    example()

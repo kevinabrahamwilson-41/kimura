@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 import oqs
 import os
 import sys
@@ -5,9 +7,10 @@ from crypto import aead
 from crypto.aead import AEADContext
 from typing import Tuple, Optional, Union
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 class MLKEM:
     """
-    Production-level ML-KEM (Kyber successor, NIST PQC standard) wrapper using liboqs-python.
+    ML-KEM (Kyber successor, NIST PQC standard) wrapper using liboqs-python.
     
     Supports ML-KEM-512, ML-KEM-768, ML-KEM-1024.
     Provides keygen, encrypt/decrypt (hybrid via shared secret), encaps/decaps.
@@ -113,34 +116,3 @@ class MLKEM:
         aead = AEADContext(shared_secret)
         plaintext = aead.decrypt(ciphertext, nonce, aad or b"")
         return plaintext
-
-
-
-
-
-
-# Production usage example
-def example():
-    kem = MLKEM("ML-KEM-512")
-    
-    # Keygen
-    pk, sk = kem.keygen()
-    print(f"PK len: {len(pk)}, SK len: {len(sk)}")
-    
-    # Encaps/Decaps
-    ct, ss_enc = kem.encaps(pk)
-    ss_dec = kem.decaps(ct, sk)
-    assert ss_enc == ss_dec
-    print("Encaps/Decaps OK")
-    
-    # Encrypt/Decrypt
-    # Encrypt/Decrypt
-    message = b"Hello, ML-KEM!"
-    nonce, ct_enc = kem.encrypt(message, ss_enc)  # <-- only 2 values
-    decrypted = kem.decrypt(nonce, ct_enc, ss_enc)  # <-- decrypt uses nonce + ciphertext + shared_secret
-    assert decrypted == message
-    print("Hybrid encrypt/decrypt OK")
-
-
-if __name__ == "__main__":
-    example()

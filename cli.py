@@ -2,6 +2,7 @@
 import asyncio
 import argparse
 import sys
+import logging
 from pathlib import Path
 from session.manager import SessionManager
 # Import all keygen functions
@@ -9,26 +10,29 @@ from crypto.keygen import (
     generate_mlkem_server_keys, generate_mlkem_client_keys,
     generate_mldsa_server_keys, generate_mldsa_client_keys
 )
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
+logger = logging.getLogger(__name__)
 from protocol.state_machine import StateMachine
 async def main():
     parser = argparse.ArgumentParser("pqc-session", description="PQC Secure File Transfer")
     subparsers = parser.add_subparsers(dest="command", help="Commands")
     
-    # 🔥 1. ML-KEM KEYGEN COMMANDS
+    # ML-KEM KEYGEN COMMANDS
     kem_parser = subparsers.add_parser("mlkem-server", help="Generate server ML-KEM keys")
     kem_parser.add_argument("--key-path", default="./keys", help="Path to keys/")
     
     kemc_parser = subparsers.add_parser("mlkem-client", help="Generate client ML-KEM keys")
     kemc_parser.add_argument("--key-path", default="./keys", help="Path to keys/")
     
-    # 🔥 2. ML-DSA KEYGEN COMMANDS  
+    #  ML-DSA KEYGEN COMMANDS  
     dsas_parser = subparsers.add_parser("mldsa-server", help="Generate server ML-DSA keys")
     dsas_parser.add_argument("--key-path", default="./keys", help="Path to keys/")
     
     dsac_parser = subparsers.add_parser("mldsa-client", help="Generate client ML-DSA keys")
     dsac_parser.add_argument("--key-path", default="./keys", help="Path to keys/")
     
-    # 🔥 3. TRANSFER COMMANDS (unchanged)
+    #  TRANSFER COMMANDS (unchanged)
     transfer_parser = subparsers.add_parser("transfer", help="PQC file transfer")
     transfer_subparsers = transfer_parser.add_subparsers(dest="mode", help="Transfer mode")
     
@@ -65,48 +69,25 @@ async def main():
     elif args.command == "transfer":
         if args.mode == "server":
             if args.persistent:
-                print("🚀 SEQUENTIAL GPU SERVER - Unlimited clients one-by-one!")
-                client_count = 0
-                
-                while True:
-                    print(f"\n🎯 Waiting for GPU Client #{client_count + 1}...")
-                    output_file = f"{Path(args.output).stem}_gpu{client_count}.bin"
-                    mgr = SessionManager("server", args.key_path, str(output_file))
-                    
-                    try:
-                        await mgr.establish_channel()  # Works perfectly
-                        print(f"✅ GPU Client #{client_count}: PQC handshake complete!")
-                        await mgr.recv_file(str(output_file))
-                        print(f"✅ GPU Client #{client_count}: '{output_file}' saved!")
-                    except Exception as e:
-                        print(f"❌ GPU Client #{client_count} error: {e}")
-                    finally:
-                        await mgr.close()
-                    
-                    client_count += 1
-                    print(f"🚀 Server ready for next GPU client...\n")
+                # FIXED: Use SINGLE PQCServer instance
+                from session.server import PQCServer
+                server = PQCServer(args.key_path, args.output)
+                await server.serve_forever(port=args.port)
 
             else:
-                # Single transfer (unchanged)
-                mgr = SessionManager("server", str(Path(args.key_path).resolve()), str(args.output))
+                # Single client fallback
+                mgr = SessionManager("server", args.key_path, args.output)
                 await mgr.establish_channel()
                 await mgr.recv_file(args.output)
                 await mgr.close()
-                print(f"✅ SERVER: Verified {args.output} received!")
+                logger.info(f"File verified: {args.output}")
 
         elif args.mode == "client":
+            from session.client import PQCClient  # Use proper client class
+            client = PQCClient(args.key_path, args.file)
             host_port = args.host.split(":")
-            mgr = SessionManager("client", str(Path(args.key_path).resolve()), args.file)
-            
-            # FIX: Pass host/port to constructor or separate connect method
-            mgr.host = host_port[0]   # Add these 2 lines
-            mgr.port = int(host_port[1])
-            
-            await mgr.establish_channel()  # Now works - no extra args!
-            await mgr.send_file(args.file)
-            await mgr.close()
-            print(f"✅ CLIENT: Sent {args.file}")
-
+            await client.connect_and_send(host_port[0], int(host_port[1]))
+            logger.info(f"File sent: {args.file}")
 
     else:
         parser.print_help()
@@ -116,4 +97,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        logger.info("Shutdown")
