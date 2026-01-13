@@ -55,6 +55,7 @@ class StateMachine:
         self.state = TransferState.INIT
         self.role = role
         self.key_path = key_path
+        self.sequence_number = 0
         self.transcript = hashlib.sha256()
         self.session_key: Optional[bytes] = None
         self.aead_ctx: Optional[AEADContext] = None
@@ -174,8 +175,8 @@ class StateMachine:
         self.session_key = hkdf_sha256(shared_secret, b"", b"pqc_session_v1" + transcript_hash, 32)
         self.aead_ctx = AEADContext(self.session_key)
         self.peer_ml_dsa_public_key = server_dsa_pk
-        await send_length_prefixed(writer, b"HANDSHAKE_OK")
         self.state = TransferState.HANDSHAKE_COMPLETE
+        await self.send_protected(writer, b"HANDSHAKE_OK")
         logger.info(f"{self.role.upper()}: Handshake complete")
 
     async def _server_send_response(self, reader, writer, **kwargs):
@@ -195,10 +196,10 @@ class StateMachine:
         await send_length_prefixed(writer, resp_msg + signature)
         self.state = TransferState.HANDSHAKE_RESP_SENT
         logger.info(f"{self.role.upper()}: Handshake response sent")
-        ack = await recv_length_prefixed(reader)
+        self.state = TransferState.HANDSHAKE_COMPLETE
+        ack = await self.recv_protected(reader)
         if ack != b"HANDSHAKE_OK":
             self._error("Client failed to verify handshake")
-        self.state = TransferState.HANDSHAKE_COMPLETE
         logger.info(f"{self.role.upper()}: Handshake complete (client confirmed)")
 
 
@@ -208,7 +209,7 @@ class StateMachine:
             self._error("No AEAD context")
         file_hash = hash_file(Path(filepath))
         signature = sign_message(file_hash, self.ml_dsa_secret_key)
-        await send_length_prefixed(writer, file_hash + signature)
+        await self.send_protected(writer, file_hash + signature)
         await send_file(writer, Path(filepath), self.aead_ctx)
         logger.info(f"{self.role.upper()}: File transfer complete")
 
@@ -216,7 +217,7 @@ class StateMachine:
         """SERVER: Receive+VERIFY file_hash + signature + encrypted_file."""
         if not self.aead_ctx:
             self._error("No AEAD context")
-        metadata = await recv_length_prefixed(reader)
+        metadata = await self.recv_protected(reader)
         file_hash = metadata[:32]      # SHA256 digest
         signature = metadata[32:]      # ML-DSA signature
         if not verify_message(file_hash, signature, self.peer_ml_dsa_public_key):
@@ -236,20 +237,50 @@ class StateMachine:
         if not self.aead_ctx:
             self._error("AEAD context not initialized")
         return self.aead_ctx
-    
+    async def send_protected(self, writer, payload: bytes):
+        """NEW: ALL post-handshake sends go through this"""
+        if self.state != TransferState.HANDSHAKE_COMPLETE or not self.aead_ctx:
+            raise ProtocolError(f"State {self.state.name}, AEAD: {self.aead_ctx is not None}")
+        seq = self.sequence_number.to_bytes(8, 'big')
+        self.sequence_number += 1
+        nonce = self.aead_ctx.generate_nonce()
+        nonce = hashlib.sha256(nonce + seq).digest()[:12]  
+        encrypted = self.aead_ctx.encrypt(payload, nonce)
+        msg = seq + nonce + encrypted 
+        await send_length_prefixed(writer, msg)
+
+    async def recv_protected(self, reader) -> bytes:
+        """ NEW: ALL post-handshake receives go through this"""
+        if self.state != TransferState.HANDSHAKE_COMPLETE:
+            raise ProtocolError("Handshake required")
+        
+        msg = await recv_length_prefixed(reader)
+        seq = msg[:8]
+        nonce = msg[8:20]  # 12 bytes
+        encrypted = msg[20:]
+        
+        # STRICT sequence verification
+        expected_seq = self.sequence_number.to_bytes(8, 'big')
+        if seq != expected_seq:
+            self._error(f"Replay! Expected {expected_seq.hex()}, got {seq.hex()}")
+        
+        payload = self.aead_ctx.decrypt(encrypted, nonce)
+        self.sequence_number += 1
+        return payload
+
     async def send_signed_data(self, writer, data: bytes):
         if self.state != TransferState.HANDSHAKE_COMPLETE:
             raise ProtocolError("Must complete handshake first")
         data_hash = hashlib.sha256(data).digest()  # 32 bytes
         signature = sign_message(data_hash, self.ml_dsa_secret_key)  # YOUR existing function!
         payload = data_hash + signature + data
-        await send_length_prefixed(writer, payload)
+        await self.send_protected(writer, payload)
         logger.info(f"{self.role.upper()}: Sent {len(data)/1024/1024:.1f}MB")
 
     async def recv_and_verify_data(self, reader) -> bytes:
         if self.state != TransferState.HANDSHAKE_COMPLETE:
             raise ProtocolError("Must complete handshake first")
-        data = await recv_length_prefixed(reader)
+        data = await self.recv_protected(reader)
         data_hash = data[:32]
         signature = data[32:32+ML_DSA_65_SIG_LEN]  # Your constant
         received_data = data[32+ML_DSA_65_SIG_LEN:]
