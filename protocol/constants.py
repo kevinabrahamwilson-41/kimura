@@ -35,8 +35,8 @@ DSAS = {
     "ML-DSA-85": "ML-DSA-85"
 }
 # File transfer params
-MAX_CHUNK_SIZE = 4096  # 4 KB
+MAX_CHUNK_SIZE = 64 * 1024 * 1024  # 64 MB
 TRANSFER_TIMEOUT = 30   # seconds
 # Misc
 LOG_LEVEL = os.getenv("PQC_LOG_LEVEL", "INFO")
-DEFAULT_PORT = 65432
+DEFAULT_PORT = 8443

@@ -2,6 +2,7 @@ import asyncio
 import logging
 from pathlib import Path
 from protocol.state_machine import StateMachine
+from protocol.constants import DEFAULT_PORT
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 
@@ -67,7 +68,7 @@ class PQCServer:
             await writer.wait_closed()
         # Add to PQCServer class:
 
-    async def serve_forever(self, port: int = 8443, host: str = "0.0.0.0"):
+    async def serve_forever(self, port: int = DEFAULT_PORT, host: str = "0.0.0.0"):
         server = await asyncio.start_server(self.handle_client, host, port)
         logger.info(f"Server listening on {host}:{port}")
 

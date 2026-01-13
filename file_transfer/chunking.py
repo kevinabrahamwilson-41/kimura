@@ -8,7 +8,7 @@ import os
 import hashlib
 from typing import Iterator, List, Tuple, NamedTuple, Union
 from pathlib import Path
-
+from protocol.constants import MAX_CHUNK_SIZE
 # Forward reference for your AEADContext (no import needed)
 from typing import ForwardRef
 AEADContext = ForwardRef("AEADContext")
@@ -23,7 +23,7 @@ class ChunkMetadata(NamedTuple):
 
 def chunk_bytes(
     data: bytes,
-    chunk_size: int = 64 * 1024,  # 64KB optimal for AES-GCM
+    chunk_size: int = MAX_CHUNK_SIZE,  # 64KB optimal for AES-GCM
 ) -> List[Tuple[int, bytes]]:
     """Split bytes into independently encryptable chunks."""
     return [(i // chunk_size, data[i:i + chunk_size]) 
@@ -32,7 +32,7 @@ def chunk_bytes(
 
 def chunk_bytes_with_metadata(
     data: bytes,
-    chunk_size: int = 64 * 1024,
+    chunk_size: int = MAX_CHUNK_SIZE,
 ) -> List[Tuple[ChunkMetadata, bytes]]:
     """Chunk with full metadata for production transfers."""
     chunks = []
@@ -61,7 +61,7 @@ def reassemble_chunks(
 
 def stream_chunks(
     filepath: Union[str, Path],
-    chunk_size: int = 64 * 1024,
+    chunk_size: int = MAX_CHUNK_SIZE,
 ) -> Iterator[Tuple[int, bytes]]:
     """Stream chunks directly from file (zero-copy)."""
     with open(filepath, 'rb') as f:
@@ -79,7 +79,7 @@ def verify_chunk_integrity(
 
 def chunk_file_for_encryption(
     filepath: Union[str, Path],
-    chunk_size: int = 64 * 1024,
+    chunk_size: int = MAX_CHUNK_SIZE,
 ) -> Iterator[Tuple[ChunkMetadata, bytes]]:
     """
     Production pipeline: file → chunks → AES-GCM ready.
@@ -112,7 +112,7 @@ def reassemble_chunks_with_hashes(
 
 
 # Your ACTUAL PQC Pipeline (separate integration functions)
-def encrypt_pipeline(filepath: str, aead_ctx, chunk_size: int = 64 * 1024):
+def encrypt_pipeline(filepath: str, aead_ctx, chunk_size: int = MAX_CHUNK_SIZE):
     """Complete sender pipeline."""
     encrypted_chunks = []
     for metadata, chunk in chunk_file_for_encryption(filepath, chunk_size):

@@ -8,7 +8,7 @@ from transport.tcp import TCPTransport
 from protocol.state_machine import StateMachine
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
-
+from protocol.constants import DEFAULT_PORT
 logging.basicConfig(
     level=logging.INFO, 
     format='[%(asctime)s] %(levelname)-8s %(name)s %(message)s',  # ADD %(name)s
@@ -28,7 +28,7 @@ class SessionManager:
         self.active_clients = {}  # {client_id: (reader, writer, state_machine)}
         self.client_counter = 0
     
-    async def establish_channel(self, reader=None, writer=None, host=None, port=8443):
+    async def establish_channel(self, reader=None, writer=None, host=None, port=DEFAULT_PORT):
         """Accept pre-connected streams OR connect as client"""
         if self.role == "client":
             # Client still connects normally
@@ -49,7 +49,7 @@ class SessionManager:
     
     async def _client_handshake(self):
         """CLIENT: Send handshake via StateMachine (handles signing automatically)."""
-        self.reader, self.writer = await self.transport.connect("127.0.0.1", 8443)
+        self.reader, self.writer = await self.transport.connect("127.0.0.1", DEFAULT_PORT)
         await self.state_machine.transition("send_handshake", 
                                         reader=self.reader, 
                                         writer=self.writer)

@@ -4,12 +4,15 @@ import argparse
 import sys
 import logging
 from pathlib import Path
+from session.client import PQCClient
+from session.server import PQCServer
 from session.manager import SessionManager
 # Import all keygen functions
 from crypto.keygen import (
     generate_mlkem_server_keys, generate_mlkem_client_keys,
     generate_mldsa_server_keys, generate_mldsa_client_keys
 )
+from protocol.constants import DEFAULT_PORT
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 logger = logging.getLogger(__name__)
@@ -38,7 +41,7 @@ async def main():
     
     # SERVER MODE
     server_parser = transfer_subparsers.add_parser("server", help="Receive file")
-    server_parser.add_argument("--port", type=int, default=8443)
+    server_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     server_parser.add_argument("--output", required=True, help="Output file path")
     server_parser.add_argument("--key-path", default="./keys", help="Path to keys/")
     server_parser.add_argument("--persistent", action="store_true", 
@@ -70,7 +73,6 @@ async def main():
         if args.mode == "server":
             if args.persistent:
                 # FIXED: Use SINGLE PQCServer instance
-                from session.server import PQCServer
                 server = PQCServer(args.key_path, args.output)
                 await server.serve_forever(port=args.port)
 
@@ -83,11 +85,17 @@ async def main():
                 logger.info(f"File verified: {args.output}")
 
         elif args.mode == "client":
-            from session.client import PQCClient  # Use proper client class
-            client = PQCClient(args.key_path, args.file)
-            host_port = args.host.split(":")
-            await client.connect_and_send(host_port[0], int(host_port[1]))
-            logger.info(f"File sent: {args.file}")
+            if hasattr(args, 'receive') and args.receive:
+                client = PQCClient(args.key_path)  # No file needed
+                await client.connect_fl(args.host.split(':')[0], int(args.host.split(':')[1]))
+                data = await client.recv_data()    # RECEIVE from server!
+                with open("received_from_server.bin", "wb") as f:
+                    f.write(data)
+            else:
+                client = PQCClient(args.key_path, args.file)
+                host_port = args.host.split(":")
+                await client.connect_and_send(host_port[0], int(host_port[1]))
+                logger.info(f"File sent: {args.file}")
 
     else:
         parser.print_help()

@@ -1,5 +1,6 @@
 import asyncio
 from .manager import SessionManager
+from protocol.constants import DEFAULT_PORT
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 
@@ -10,7 +11,7 @@ class PQCClient:
         self.mgr = None
         self.on_weights_received = None  # FL callback
         
-    async def connect_and_send(self, host: str, port: int = 8443):
+    async def connect_and_send(self, host: str, port: int = DEFAULT_PORT):
         """✅ KEEP EXISTING - file transfer mode"""
         self.mgr = SessionManager("client", self.key_path)
         try:
@@ -21,7 +22,7 @@ class PQCClient:
             await self.mgr.close()
     
     # FL PERSISTENT MODE (doesn't close connection)
-    async def connect_fl(self, host: str, port: int = 8443):
+    async def connect_fl(self, host: str, port: int = DEFAULT_PORT):
         """FL mode: Persistent bidirectional channel"""
         self.mgr = SessionManager("client", self.key_path)
         await self.mgr.establish_channel(host=host, port=port)

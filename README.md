@@ -228,11 +228,6 @@ The protocol follows a **fail-closed** security model.
    pip install oqspy cryptography
    ```
 
-3. **Project dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
 ## Verification Steps
 
 Test the crypto backend before running peers:
@@ -251,47 +246,52 @@ print("PQC crypto ready:", len(public_key))
 
 ```
 pqc_secure_file_transfer/
-├── protocol/
-│   ├── messages.py        # Message formats (HELLO, HANDSHAKE, etc.)
-│   ├── state_machine.py   # Protocol states & transitions
-│   └── constants.py       # Versions, limits, enums
-│
-├── crypto/
-│   ├── kem.py             # ML-KEM wrapper (liboqs)
-│   ├── dsa.py             # ML-DSA wrapper (liboqs)
-│   ├── aead.py            # AES-256-GCM (cryptography)
-│   ├── kdf.py             # HKDF
-│   └── hash.py            # SHA-256
-│
-├── transport/
-│   └── tcp.py             # Async TCP transport
-│
-├── file_transfer/
-│   ├── chunking.py        # File chunk logic
-│   └── transfer.py        # Send/receive logic
-│
-├── peer/
-│   ├── initiator.py       # P2P initiator logic
-│   ├── responder.py       # P2P responder logic
-│   └── peer.py            # Unified peer entry
-│
 ├── benchmarks/
 │   ├── handshake.py
+│   ├── __init__.py
 │   └── throughput.py
-│
-├── tests/
-│   ├── test_handshake.py
-│   ├── test_replay.py
-│   └── test_file_integrity.py
-│
+├── cli.py
+├── crypto/
+│   ├── aead.py
+│   ├── hash.py
+│   ├── __init__.py
+│   ├── kdf.py
+│   ├── keygen.py
+│   ├── mldsa.py
+│   ├── mlkem.py
+│   └── signing.py
 ├── examples/
-│   ├── send_file.py
-│   └── receive_file.py
-│
-├── flow.txt               # Protocol flow diagram
+│   ├── __init__.py
+│   ├── receive_file.py
+│   └── send_file.py
+├── file_transfer/
+│   ├── bytes_conversion.py
+│   ├── chunking.py
+│   ├── __init__.py
+│   └── transfer.py
+├── flow.md
+├── LICENSE
+├── new_file.bin
+├── protocol/
+│   ├── constants.py
+│   ├── __init__.py
+│   ├── messages.py
+│   └── state_machine.py
+├── pyproject.toml
 ├── README.md
-├── requirements.txt
-└── pyproject.toml
+├── session/
+│   ├── client.py
+│   ├── __init__.py
+│   ├── manager.py
+│   └── server.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_file_integrity.py
+│   ├── test_handshake.py
+│   └── test_replay.py
+└── transport/
+    ├── __init__.py
+    └── tcp.py
 ```
 
 ---
