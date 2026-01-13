@@ -8,7 +8,7 @@ class PQCClient:
         self.key_path = key_path
         self.file_path = file_path
         self.mgr = None
-        self.on_weights_received = None  # 🔥 NEW: FL callback
+        self.on_weights_received = None  # FL callback
         
     async def connect_and_send(self, host: str, port: int = 8443):
         """✅ KEEP EXISTING - file transfer mode"""
@@ -20,7 +20,7 @@ class PQCClient:
         finally:
             await self.mgr.close()
     
-    # 🔥 NEW: FL PERSISTENT MODE (doesn't close connection)
+    # FL PERSISTENT MODE (doesn't close connection)
     async def connect_fl(self, host: str, port: int = 8443):
         """FL mode: Persistent bidirectional channel"""
         self.mgr = SessionManager("client", self.key_path)
@@ -30,17 +30,17 @@ class PQCClient:
         asyncio.create_task(self._fl_loop())
     
     async def send_weights(self, weights: bytes):
-        """🔥 NEW: Send weights over existing channel"""
+        """NEW: Send weights over existing channel"""
         if self.mgr:
             # You'll add this to SessionManager later
             await self.mgr.send_data(weights)
     
     def set_weights_callback(self, callback):
-        """🔥 NEW: Callback when server sends weights"""
+        """Callback when server sends weights"""
         self.on_weights_received = callback
     
     async def _fl_loop(self):
-        """🔥 Internal FL bidirectional loop"""
+        """Internal FL bidirectional loop"""
         while True:
             try:
                 # Receive from server
