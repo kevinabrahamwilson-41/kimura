@@ -204,7 +204,7 @@ The protocol follows a **fail-closed** security model.
 
 ## 11. Implementation Details
 
-* Written in C++ (modern standard)
+* Written in Python (research based)
 * CMake-based build system
 * Modular cryptographic backend
 * Deterministic test vectors
@@ -212,22 +212,37 @@ The protocol follows a **fail-closed** security model.
 
 ---
 
-## 12. Build & Run
+## 12 Prerequisites (Ubuntu)
 
-```bash
-mkdir build && cd build
-cmake ..
-make
-```
+1. **liboqs shared library** (required for ML-KEM/ML-DSA):
+   ```bash
+   sudo apt install cmake ninja-build gcc g++ libssl-dev
+   git clone https://github.com/open-quantum-safe/liboqs.git
+   cd liboqs && mkdir build && cd build
+   cmake -GNinja -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local ..
+   ninja && sudo ninja install && sudo ldconfig
+   ```
 
-Example P2P run:
+2. **Python bindings**:
+   ```bash
+   pip install oqspy cryptography
+   ```
 
-```bash
-# Peer A
-./pqc_peer --listen 9000
+3. **Project dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Peer B
-./pqc_peer --connect <peer-ip>:9000 --send file.bin
+## Verification Steps
+
+Test the crypto backend before running peers:
+
+```python
+# test_crypto.py (add to tests/)
+import oqs
+kem = oqs.KeyEncapsulation('ML-KEM-768')
+public_key = kem.generate_keypair()
+print("PQC crypto ready:", len(public_key))
 ```
 
 ---
