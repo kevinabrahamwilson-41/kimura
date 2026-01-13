@@ -6,7 +6,7 @@ import hashlib
 import sys
 from pathlib import Path
 from transport.tcp import TCPTransport
-from protocol.constants import ML_DSA_65_SIG_LEN
+from protocol.constants import ML_DSA_65_SIG_LEN, PROTOCOL_VERSION
 # Fix imports for YOUR project structure
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.dirname(__file__))
@@ -41,6 +41,7 @@ class TransferState(Enum):
     INIT = auto()
     HANDSHAKE_SENT = auto()
     HANDSHAKE_RECV = auto()
+    HANDSHAKE_RESP_SENT = auto() 
     HANDSHAKE_COMPLETE = auto()
     FILE_TRANSFER = auto()
     TRANSFER_DONE = auto()
@@ -54,7 +55,7 @@ class StateMachine:
         self.state = TransferState.INIT
         self.role = role
         self.key_path = key_path
-
+        self.transcript = hashlib.sha256()
         self.session_key: Optional[bytes] = None
         self.aead_ctx: Optional[AEADContext] = None
         self.kem: Optional[MLKEM] = None
@@ -103,26 +104,56 @@ class StateMachine:
         await transitions[self.state][event](reader, writer, **kwargs)
 
     async def _client_send_handshake(self, reader, writer, **kwargs):
-        # Send EXACT key bytes only (no slicing issues)
-        message_to_sign = self.kem_public_key + self.ml_dsa_public_key
-        signature = sign_message(message_to_sign, self.ml_dsa_secret_key)
-        full_message = message_to_sign + signature
+        # 1. Build handshake body (this is what goes on the wire)
+        body = (
+            PROTOCOL_VERSION.to_bytes(2, "big") +
+            self.kem_public_key +
+            self.ml_dsa_public_key
+        )
+
+        # 2. Update transcript with what is being sent
+        self.transcript.update(body)
+
+        # 3. Sign the transcript hash
+        signature = sign_message(
+            self.transcript.digest(),
+            self.ml_dsa_secret_key
+        )
+
+        # 4. Send
+        full_message = body + signature
         await send_length_prefixed(writer, full_message)
+
         self.state = TransferState.HANDSHAKE_SENT
         logger.info(f"{self.role.upper()}: Handshake init sent")
 
+
     async def _server_recv_handshake(self, reader, writer, **kwargs):
         data = await recv_length_prefixed(reader)
-        signature = data[-ML_DSA_65_SIG_LEN:]
         body = data[:-ML_DSA_65_SIG_LEN]
-        client_kem_pk = body[:len(self.kem_public_key)]     
-        client_dsa_pk = body[len(self.kem_public_key):len(self.kem_public_key)+len(self.ml_dsa_public_key)]
-        if not verify_message(body, signature, client_dsa_pk):
-            self._error("client signature invalid")
+        signature = data[-ML_DSA_65_SIG_LEN:]
+        # 1. Parse version
+        version = int.from_bytes(body[:2], "big")
+        if version != PROTOCOL_VERSION:
+            self._error("Unsupported protocol version")
+        # 2. Parse keys
+        offset = 2
+        client_kem_pk = body[offset:offset+len(self.kem_public_key)]
+        offset += len(self.kem_public_key)
+        client_dsa_pk = body[offset:offset+len(self.ml_dsa_public_key)]
+        # 3. Update transcript BEFORE verify
+        self.transcript.update(body)
+        # 4. Verify transcript-bound signature
+        if not verify_message(
+            self.transcript.digest(),
+            signature,
+            client_dsa_pk
+        ):
+            self._error("Client signature invalid")
         self.peer_kem_public_key = client_kem_pk
         self.peer_ml_dsa_public_key = client_dsa_pk
         self.state = TransferState.HANDSHAKE_RECV
-        logger.info(f"{self.role.upper()}: Client signature verified")
+        logger.info(f"{self.role.upper()}: Client handshake verified")
 
     async def _client_recv_response(self, reader, writer, **kwargs):
         """CLIENT: Receive+VERIFY server's signed ciphertext."""
@@ -130,26 +161,46 @@ class StateMachine:
         resp_msg = data[:-ML_DSA_65_SIG_LEN]
         signature = data[-ML_DSA_65_SIG_LEN:]
         server_dsa_pk, _ = load_mldsa_server_keys(self.key_path)
-        if not verify_message(resp_msg, signature, server_dsa_pk):
+        self.transcript.update(resp_msg)  # add received message to transcript
+        if not verify_message(
+            self.transcript.digest(),   # verify transcript hash
+            signature,
+            server_dsa_pk
+        ):
             self._error("Server response signature invalid")
         ciphertext = parse_handshake_resp(resp_msg)
         shared_secret = self.kem.decaps(ciphertext, self.kem_secret_key)
-        self.session_key = hkdf_sha256(shared_secret, b"", b"pqc_session_v1", 32)
+        transcript_hash = self.transcript.digest()
+        self.session_key = hkdf_sha256(shared_secret, b"", b"pqc_session_v1" + transcript_hash, 32)
         self.aead_ctx = AEADContext(self.session_key)
         self.peer_ml_dsa_public_key = server_dsa_pk
+        await send_length_prefixed(writer, b"HANDSHAKE_OK")
         self.state = TransferState.HANDSHAKE_COMPLETE
         logger.info(f"{self.role.upper()}: Handshake complete")
 
     async def _server_send_response(self, reader, writer, **kwargs):
         """SERVER: Sign+send ciphertext using CLIENT's PK."""
         ciphertext, shared_secret = self.kem.encaps(self.peer_kem_public_key)
-        self.session_key = hkdf_sha256(shared_secret, b"", b"pqc_session_v1", 32)
-        self.aead_ctx = AEADContext(self.session_key)
         resp_msg = serialize_handshake_resp(ciphertext)
-        signature = sign_message(resp_msg, self.ml_dsa_secret_key)  # Sign CT
+        self.transcript.update(resp_msg)
+        transcript_hash = self.transcript.digest()
+        self.session_key = hkdf_sha256(
+            shared_secret,
+            b"",
+            b"pqc_session_v1" + transcript_hash,
+            32
+        )
+        self.aead_ctx = AEADContext(self.session_key)
+        signature = sign_message(transcript_hash, self.ml_dsa_secret_key)
         await send_length_prefixed(writer, resp_msg + signature)
+        self.state = TransferState.HANDSHAKE_RESP_SENT
+        logger.info(f"{self.role.upper()}: Handshake response sent")
+        ack = await recv_length_prefixed(reader)
+        if ack != b"HANDSHAKE_OK":
+            self._error("Client failed to verify handshake")
         self.state = TransferState.HANDSHAKE_COMPLETE
-        logger.info(f"{self.role.upper()}: Handshake complete")
+        logger.info(f"{self.role.upper()}: Handshake complete (client confirmed)")
+
 
     async def _start_send_file(self, reader, writer, filepath: str):
         """CLIENT: Send file_hash + signature + encrypted_file."""
