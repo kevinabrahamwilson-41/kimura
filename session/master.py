@@ -4,8 +4,8 @@ from pathlib import Path
 from protocol.state_machine import StateMachine
 from protocol.constants import DEFAULT_PORT
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 
+warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)-8s %(name)s %(message)s',
@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class PQCServer:
+class PQCMaster:
     def __init__(self, key_path: str, base_output: str = None):
         self.key_path = Path(key_path)
         self.base_output = Path(base_output) if base_output else None
