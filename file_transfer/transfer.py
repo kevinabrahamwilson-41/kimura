@@ -43,7 +43,7 @@ async def send_file(
     writer: asyncio.StreamWriter,
     filepath: Path,
     aead_ctx: AEADContext,
-    chunk_size: int = 64 * 1024,
+    chunk_size: int = 8 * 1024 * 1024,
 ) -> None:
     """✅ USES chunk_file_for_encryption() - Send encrypted chunks."""
     file_size = get_file_size(filepath)

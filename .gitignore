@@ -74,3 +74,4 @@ liboqs-python/  # because this is a separate repo, we usually add it as a submod
 *.log
 *.tmp
 liboqs-python/
+__pycache__/

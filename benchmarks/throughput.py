@@ -115,7 +115,7 @@ class ThroughputTester:
 
                 start = time.perf_counter()
                 client = PQCClient(self.key_path, str(self.test_file))
-                await client.connect_and_send("127.0.0.1", 8443)
+                await client.connect_and_send("127.0.0.1", 8444)
                 duration = time.perf_counter() - start
 
                 throughput = (self.file_size_gb * 1024) / duration
@@ -194,13 +194,13 @@ class ThroughputTester:
         server_log.info(
             "listen addr=%s port=%d",
             "127.0.0.1",
-            8443,
+            8444,
         )
 
         server_instance = await asyncio.start_server(
             server.handle_client,
             "127.0.0.1",
-            8443,
+            8444,
         )
 
         async with server_instance:
