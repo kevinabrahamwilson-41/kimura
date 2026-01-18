@@ -1,4 +1,4 @@
-# PQC Secure Centralized File Transfer Protocol
+# Kimura
 
 > **Post-Quantum Secure, Centralized File Transfer Protocol**
 
