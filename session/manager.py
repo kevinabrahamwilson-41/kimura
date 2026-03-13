@@ -1,11 +1,11 @@
 # session/manager.py - COMPLETE flow w/ your tcp.py
 import asyncio
+import hashlib
 import logging
 from pathlib import Path
-from file_transfer.transfer import send_length_prefixed
-from protocol.messages import serialize_handshake_init
-from transport.tcp import TCPTransport
-from protocol.state_machine import StateMachine
+from kimura.file_transfer.transfer import chunked_send_file, recv_file
+from kimura.transport.tcp import TCPTransport
+from kimura.protocol.state_machine import StateMachine
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="oqs")
 from protocol.constants import DEFAULT_PORT
@@ -15,7 +15,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-
 class SessionManager:
     def __init__(self, role: str, key_path: str = "./keys", output_path: str = None):
         self.role = role
@@ -27,24 +26,34 @@ class SessionManager:
         self.server_running = False
         self.active_clients = {}  # {client_id: (reader, writer, state_machine)}
         self.client_counter = 0
+        self.worker_id = None  # Will be set during handshake (derived from peer pubkey)
     
     async def establish_channel(self, reader=None, writer=None, host=None, port=DEFAULT_PORT):
-        """Accept pre-connected streams OR connect as client"""
         if self.role == "client":
-            # Client still connects normally
+            # connect normally
             self.reader, self.writer = await self.transport.connect(host or "127.0.0.1", port)
+
+            # SEND handshake & internally process server response
             await self.state_machine.transition("send_handshake", reader=self.reader, writer=self.writer)
-            await self.state_machine.transition("recv_response", reader=self.reader, writer=self.writer)
+
+            # NO need to call recv_response manually; StateMachine already does it
             logger.info(f"{self.role.upper()}: Handshake completed")
+
         else:
-            # SERVER - REQUIRE pre-connected reader/writer from handle_client
+            # SERVER: pre-connected streams
             if not (reader and writer):
                 raise ValueError("Server: must provide reader/writer from handle_client")
             self.reader, self.writer = reader, writer
+
             await self.state_machine.transition("recv_handshake", reader=self.reader, writer=self.writer)
             await self.state_machine.transition("send_response", reader=self.reader, writer=self.writer)
+            peer_pubkey = self.state_machine.get_peer_identity_key()
+            worker_id = hashlib.sha256(peer_pubkey).hexdigest()[:16]
+            self.worker_id = worker_id  # Store worker_id in SessionManager
+            self.active_clients[worker_id] = (reader, writer, self.state_machine)
             logger.info(f"{self.role.upper()}: Handshake completed")
         self.ready.set()
+
 
     
     async def _client_handshake(self):
@@ -60,28 +69,30 @@ class SessionManager:
         logger.info(f"{self.role.upper()}: Handshake completed")
 
     async def send_file(self, filepath: str):
-        """PHASE 2: Send file over EXISTING connection."""
+        """Client sends file post-handshake using chunked AEAD encryption."""
         if not self.state_machine.is_ready_for_transfer():
-            raise RuntimeError("Must call establish_channel() first!")
-        await self.state_machine.transition("start_send_file", 
-                                          reader=self.reader,
-                                          writer=self.writer,
-                                          filepath=filepath)
-        logger.info(f"{self.role.upper()}: File transfer completed: {Path(filepath).name}")
+            raise RuntimeError("Handshake required first")
+        # Use the AEAD send context from the state machine (already created during handshake)
+        await self.state_machine.transition(
+            "start_send_file",
+            reader=self.reader,
+            writer=self.writer,
+            filepath=str(filepath)
+        )
+        logger.info(f"CLIENT sent {Path(filepath).name}")
 
     async def recv_file(self, output_path: str):
-        if not self.active_clients:
-            raise RuntimeError("No connected clients")
-        client_id, (reader, writer, sm) = next(iter(self.active_clients.items()))
-        if not sm.is_ready_for_transfer():
-            raise RuntimeError("Handshake incomplete for client")
-        await sm.transition(
+        """Server receives file post-handshake using StateMachine wrapper."""
+        if not self.state_machine.is_ready_for_transfer():
+            raise RuntimeError("Handshake required first")
+
+        await self.state_machine.transition(
             "start_recv_file",
-            reader=reader,
-            writer=writer,
-            output_path=output_path
+            reader=self.reader,
+            writer=self.writer,
+            output_path=str(output_path)
         )
-        logger.info(f"SERVER: File verified from client #{client_id}")
+        logger.info(f"SERVER received file -> {output_path}")
 
     async def close(self):
         logger.info("SessionManager shutting down")
@@ -108,12 +119,21 @@ class SessionManager:
         logger.info("SessionManager cleanup complete")
 
     async def send_data(self, data: bytes):
-        """Send signed weights"""
-        await self.state_machine.send_signed_data(self.writer, data)
-        logger.info(f"{self.role.upper()}: Sent {len(data)/1024/1024:.1f}MB")
+        """Send weights to peer post-handshake"""
+        if not self.state_machine.is_ready_for_transfer():
+            raise RuntimeError("Handshake required first")
 
+        writer = self.writer
+        reader = self.reader
+        if not writer or writer.is_closing():
+            raise RuntimeError("Writer not ready for data transfer")
+
+        await self.state_machine.send_protected(reader=reader, writer=writer, payload=data)
+        logger.info(f"{self.role.upper()}: Sent {len(data)/1024/1024:.3f} MB")
+        
     async def recv_data(self) -> bytes:
-        """Receive + verify weights"""
-        data = await self.state_machine.recv_and_verify_data(self.reader)
-        logger.info(f"{self.role.upper()}: Received {len(data)/1024/1024:.1f}MB")
+        """Receive + verify weights (post-handshake)"""
+        data = await self.state_machine.recv_protected(self.reader, self.writer)
+        logger.info(f"{self.role.upper()}: Received {len(data)/1024/1024:.3f} MB")
         return data
+

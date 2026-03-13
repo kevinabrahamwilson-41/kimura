@@ -4,8 +4,10 @@ import argparse
 import sys
 import logging
 from pathlib import Path
-from session.client import PQCClient
-from session.server import PQCServer
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from session.worker import SecureClient
+from session.master import SecureServer
 from session.manager import SessionManager
 # Import all keygen functions
 from crypto.keygen import (
@@ -73,26 +75,40 @@ async def main():
         if args.mode == "server":
             if args.persistent:
                 # FIXED: Use SINGLE PQCServer instance
-                server = PQCServer(args.key_path, args.output)
+                server = SecureServer(args.key_path, args.output)
                 await server.serve_forever(port=args.port)
 
             else:
-                # Single client fallback
-                mgr = SessionManager("server", args.key_path, args.output)
-                await mgr.establish_channel()
-                await mgr.recv_file(args.output)
-                await mgr.close()
-                logger.info(f"File verified: {args.output}")
+                async def handle_client(reader, writer):
+                    mgr = SessionManager("server", args.key_path, args.output)
+                    try:
+                        await mgr.establish_channel(reader, writer)
+                        await mgr.recv_file(args.output)
+                        logger.info(f"File verified: {args.output}")
+                    except asyncio.IncompleteReadError:
+                        logger.debug("Client disconnected cleanly during session")
+                    finally:
+                        await mgr.close()
+                        writer.close()
+                        await writer.wait_closed()
+                server = await asyncio.start_server(
+                    handle_client,
+                    host="0.0.0.0",
+                    port=args.port
+                )
+                logger.info(f"Server listening on 0.0.0.0:{args.port}")
+                async with server:
+                    await server.serve_forever()
 
         elif args.mode == "client":
             if hasattr(args, 'receive') and args.receive:
-                client = PQCClient(args.key_path)  # No file needed
+                client = SecureClient(args.key_path)  # No file needed
                 await client.connect_fl(args.host.split(':')[0], int(args.host.split(':')[1]))
                 data = await client.recv_data()    # RECEIVE from server!
                 with open("received_from_server.bin", "wb") as f:
                     f.write(data)
             else:
-                client = PQCClient(args.key_path, args.file)
+                client = SecureClient(args.key_path, args.file)
                 host_port = args.host.split(":")
                 await client.connect_and_send(host_port[0], int(host_port[1]))
                 logger.info(f"File sent: {args.file}")
