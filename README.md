@@ -1,5 +1,3 @@
-Here’s a **clean, polished `README.md`** for **Kimura**, rewritten in a unified style and including a **handshake‑style diagram description** plus a **paper‑style results section** you can drop into a LaTeX‑to‑PDF report.
-
 ***
 
 # **Kimura**  
@@ -8,6 +6,10 @@ Here’s a **clean, polished `README.md`** for **Kimura**, rewritten in a unifie
 Kimura is a research‑oriented implementation of a **custom post‑quantum secure communication protocol**, designed to provide authenticated key exchange, encrypted transport, and secure file transfer over untrusted networks.  
 
 The system combines **NIST‑selected post‑quantum cryptographic primitives** (ML‑KEM‑768, ML‑DSA‑65) with a structured protocol design, including handshake negotiation, transcript binding, and a state‑driven secure channel. It is intended for experimentation, protocol design study, and post‑quantum cryptography research, not for production deployment.
+
+*Benchmark Hardware:* **Lenovo LOQ 15IRX9**  
+(**Intel Core i7-13650HX** 14-core/20-thread @ 2.6–4.9 GHz, **NVIDIA RTX 4060 Max-Q 8GB**)  
+**Ubuntu 24.04.4 LTS** (Linux 6.17.0-14-generic), *localhost TCP*
 
 ***
 
@@ -57,41 +59,41 @@ Kimura is organized as a layered stack:
 The handshake can be visualized as a **four‑message TLS‑style exchange**:
 
 ```
-Client                                Server
-  |                                       |
-  | ClientInit                            |
-  |-------------------------------------->|
-  | • ML‑KEM public key                   |
-  | • ML‑DSA public key                   |
-  | • Signature over handshake data       |
-  |                                       |
-  |                                       | verify signature
-  |                                       | TOFU identity
-  |                                       |
-  |                                       |
-  | ServerResponse                        |
-  |<--------------------------------------|
-  | • ML‑KEM ciphertext (KEM encapsulation) |
-  | • Server ML‑DSA public key            |
-  | • Server signature                    |
-  |                                       |
-  |                                       |
-  | Key derivation                        |
-  | • Shared secret via ML‑KEM decapsulation |
+Client                                             Server
+  |                                                  |
+  | ClientInit                                       |
+  |------------------------------------------------->|
+  | • ML‑KEM public key                              |
+  | • ML‑DSA public key                              |
+  | • Signature over handshake data                  |
+  |                                                  |
+  |                                                  | verify signature
+  |                                                  | TOFU identity
+  |                                                  |
+  |                                                  |
+  | ServerResponse                                   |
+  |<-------------------------------------------------|
+  | • ML‑KEM ciphertext (KEM encapsulation)          |
+  | • Server ML‑DSA public key                       |
+  | • Server signature                               |
+  |                                                  |
+  |                                                  |
+  | Key derivation                                   |
+  | • Shared secret via ML‑KEM decapsulation         |
   | • Transcript hash (ClientInit || ServerResponse) |
-  | • Session keys via HKDF‑SHA256        |
-  |                                       |
-  |                                       |
-  | Handshake ACK (b'HANDSHAKE_OK')       |
-  |-------------------------------------->|
-  |                                       |
-  |                                       | validate sequence
-  |                                       | enable secure channel
-  |                                       |
-  |<------------ SECURE CHANNEL ---------->| (bidirectional AEAD)
-  |                                       |
-  | Encrypted data / file transfer        |
-  |-------------------------------------->|
+  | • Session keys via HKDF‑SHA256                   |
+  |                                                  |
+  |                                                  |
+  | Handshake ACK (b'HANDSHAKE_OK')                  |
+  |------------------------------------------------->|
+  |                                                  |
+  |                                                  | validate sequence
+  |                                                  | enable secure channel
+  |                                                  |
+  |<----------------- SECURE CHANNEL --------------->| (bidirectional AEAD)
+  |                                                  |
+  | Encrypted data / file transfer                   |
+  |------------------------------------------------->|
 ```
 
 Key points:
@@ -328,5 +330,4 @@ MIT License – see [LICENSE](./LICENSE)
 **Kevin Abraham Wilson**  
 *Protocol Designer & Developer*  
 **Gmail:** [kevinabrahamwilson8@gmail.com](mailto:kevinabrahamwilson8@gmail.com)
-
 ***
