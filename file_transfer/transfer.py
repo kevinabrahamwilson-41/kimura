@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(__file__))  # file_transfer/
 from kimura.crypto.aead import AEADContext
 from kimura.file_transfer.chunking import chunk_file_for_encryption, ChunkMetadata, verify_chunk_integrity
 from kimura.file_transfer.bytes_conversion import format_file_size, get_file_size
-
+from lz4.frame import decompress
 
 async def send_length_prefixed(writer: asyncio.StreamWriter, data: bytes) -> None:
     """Send data with 4-byte length prefix."""
@@ -53,18 +53,17 @@ async def chunked_send_file(
     filepath: Path,
     aead_ctx: AEADContext,
     chunk_size: int = 8 * 1024 * 1024,
+    use_lz4: bool = True
 ) -> None:
     """Send encrypted file in chunks, log only at the end."""
     file_size = get_file_size(filepath)
-    total_chunks = (file_size + chunk_size - 1) // chunk_size
-
+    total_chunks = (file_size + chunk_size - 1) // chunk_size       
     # 1. Send file header: total_chunks, file_size
     header = struct.pack('>QQ', total_chunks, file_size)
     await send_length_prefixed(writer, header)
-
     # 2. Send encrypted chunks
     chunks_sent = 0
-    for metadata, chunk in chunk_file_for_encryption(filepath, chunk_size):
+    for metadata, chunk in chunk_file_for_encryption(filepath, chunk_size, use_lz4=use_lz4):
         nonce = aead_ctx.generate_nonce()
         encrypted = aead_ctx.encrypt(chunk, nonce)
         msg = (
@@ -84,12 +83,12 @@ async def chunked_send_file(
         f"size={format_file_size(file_size)}"
     )
 
-
 async def recv_file(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     output_path: Path,
     aead_ctx: AEADContext,
+    use_lz4: bool = True
 ) -> Path:
     """✅ FULL integrity verification with ChunkMetadata."""
     # 1. Read header
@@ -111,10 +110,11 @@ async def recv_file(
         encrypted = msg[60:]                              # Encrypted data
         # 3. Decrypt
         chunk = aead_ctx.decrypt(encrypted, nonce)
-        metadata = ChunkMetadata(index, size, chunk_hash)
-        if not verify_chunk_integrity(metadata, chunk):
+        raw_chunk = decompress(chunk) if use_lz4 else chunk
+        metadata = ChunkMetadata(index, len(raw_chunk), chunk_hash)
+        if not verify_chunk_integrity(metadata, raw_chunk):
             raise ValueError(f"❌ Integrity fail at chunk {index}")
-        chunks.append((index, chunk))
+        chunks.append((index, raw_chunk))
     # 5. Reassemble in order
     chunks.sort(key=lambda x: x[0])
     output_path.parent.mkdir(exist_ok=True)

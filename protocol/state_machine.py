@@ -1,9 +1,12 @@
+import asyncio
 from enum import Enum, auto
+import struct
 from typing import Optional
 import logging
 import os
 import hashlib
 import sys
+import lz4.frame
 from pathlib import Path
 from kimura.protocol.constants import ML_DSA_65_SIG_LEN, PROTOCOL_VERSION
 from kimura.file_transfer.transfer import chunked_send_file, recv_file
@@ -360,27 +363,36 @@ class StateMachine:
         payload = self.aead_ctx.recv_ctx.decrypt(encrypted, nonce)
         self.aead_ctx.recv_seq += 1
         return payload
-    async def _send_file(self, reader, writer, filepath: str):
-        """Send file post-handshake using chunked AEAD encryption"""
+    async def _send_file(self, reader, writer, filepath: str, compress: bool = True):
+            """Send file post-handshake using optional compression + chunked AEAD encryption"""
+            if not self.is_ready_for_transfer():
+                raise ProtocolError("Handshake required before file transfer")
+            await chunked_send_file(
+                writer=writer,
+                filepath=Path(filepath),
+                aead_ctx=self.aead_ctx.send_ctx,
+                use_lz4=compress,
+            )
+            
+    async def _recv_file(self, reader, writer, **kwargs):
+        """
+        Receive file post-handshake using optional decompression + chunked AEAD decryption.
+        """
         if not self.is_ready_for_transfer():
             raise ProtocolError("Handshake required before file transfer")
-        
-        await chunked_send_file(
+
+        output_path = Path(kwargs["output_path"])
+        use_lz4 = kwargs.get("use_lz4", True)
+
+        await recv_file(
+            reader=reader,
             writer=writer,
-            filepath=Path(filepath),
-            aead_ctx=self.aead_ctx.send_ctx
+            output_path=output_path,
+            aead_ctx=self.aead_ctx.recv_ctx,
+            use_lz4=use_lz4,
         )
 
-    async def _recv_file(self, reader, writer, output_path: str):
-        """Receive file post-handshake using chunked AEAD decryption"""
-        if not self.is_ready_for_transfer():
-            raise ProtocolError("Handshake required before file transfer")
-        await recv_file(
-            reader=reader,        # USE THE ARGUMENT
-            writer=writer,        # USE THE ARGUMENT
-            output_path=Path(output_path),
-            aead_ctx=self.aead_ctx.recv_ctx
-        )
+
         # For AEAD sends (broadcast_weights, send_data)
     def is_ready_for_protected(self):
         return self.handshake_done and self.aead_ctx is not None

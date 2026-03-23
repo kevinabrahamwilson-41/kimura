@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import logging
+import lz4.frame
 from pathlib import Path
 from kimura.file_transfer.transfer import chunked_send_file, recv_file
 from kimura.transport.tcp import TCPTransport
@@ -20,6 +21,7 @@ class SessionManager:
         self.role = role
         self.key_path = key_path
         self.output_path = output_path
+        self.total_sent_bytes = 0
         self.ready = asyncio.Event()
         self.state_machine = StateMachine(key_path, role)
         self.transport = TCPTransport()
@@ -119,21 +121,45 @@ class SessionManager:
         logger.info("SessionManager cleanup complete")
 
     async def send_data(self, data: bytes):
-        """Send weights to peer post-handshake"""
+        """Send weights to peer post-handshake (with optional compression)"""
         if not self.state_machine.is_ready_for_transfer():
             raise RuntimeError("Handshake required first")
-
         writer = self.writer
         reader = self.reader
         if not writer or writer.is_closing():
             raise RuntimeError("Writer not ready for data transfer")
+        if len(data) > 1024:  # 1KB threshold
+            compressed = lz4.frame.compress(data)
+            flag = b'\x01'
+            payload = flag + compressed
+            logger.info(f"{self.role.upper()}: Compressed {len(data)} → {len(compressed)} bytes")
+        else:
+            payload = b'\x00' + data  # no compression
+        await self.state_machine.send_protected(
+            reader=reader,
+            writer=writer,
+            payload=payload
+        )
 
-        await self.state_machine.send_protected(reader=reader, writer=writer, payload=data)
-        logger.info(f"{self.role.upper()}: Sent {len(data)/1024/1024:.3f} MB")
+        logger.info(f"{self.role.upper()}: Sent {len(payload)/1024/1024:.3f} MB")
         
     async def recv_data(self) -> bytes:
-        """Receive + verify weights (post-handshake)"""
-        data = await self.state_machine.recv_protected(self.reader, self.writer)
-        logger.info(f"{self.role.upper()}: Received {len(data)/1024/1024:.3f} MB")
-        return data
+        """Receive + verify weights (post-handshake, with decompression)"""
+        payload = await self.state_machine.recv_protected(self.reader, self.writer)
+        if not payload:
+            return payload
+        flag = payload[0:1]
+        data = payload[1:]
+        if flag == b'\x01':
+            decompressed = lz4.frame.decompress(data)
+            logger.info(f"{self.role.upper()}: Decompressed {len(data)} → {len(decompressed)} bytes")
+            final_data = decompressed
+        else:
+            final_data = data
+        logger.info(f"{self.role.upper()}: Received {len(final_data)/1024/1024:.3f} MB")
+        if not hasattr(self, "bytes_received"):
+            self.bytes_received = 0
+
+        self.bytes_received += len(payload)
+        return final_data
 

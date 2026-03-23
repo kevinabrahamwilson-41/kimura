@@ -8,6 +8,8 @@ import os
 import hashlib
 from typing import Iterator, List, Tuple, NamedTuple, Union
 from pathlib import Path
+
+import lz4
 from kimura.protocol.constants import MAX_CHUNK_SIZE
 # Forward reference for your AEADContext (no import needed)
 from typing import ForwardRef
@@ -76,18 +78,28 @@ def verify_chunk_integrity(
     """Verify single chunk integrity."""
     return metadata.hash == hashlib.sha256(chunk).digest()
 
-
 def chunk_file_for_encryption(
     filepath: Union[str, Path],
     chunk_size: int = MAX_CHUNK_SIZE,
+    use_lz4: bool = True,
 ) -> Iterator[Tuple[ChunkMetadata, bytes]]:
-    """
-    Production pipeline: file → chunks → AES-GCM ready.
-    """
-    with open(filepath, 'rb') as f:
-        for i, chunk in enumerate(iter(lambda: f.read(chunk_size), b'')):
-            yield ChunkMetadata(i, len(chunk), hashlib.sha256(chunk).digest()), chunk
-
+    with open(filepath, "rb") as f:
+        for i, chunk in enumerate(iter(lambda: f.read(chunk_size), b"")):
+            # 1. Source of truth is raw_chunk
+            raw_chunk = chunk
+            # 2. Conditionally compress
+            if use_lz4:
+                compressed_chunk = lz4.frame.compress(raw_chunk, compression_level=0)
+            else:
+                compressed_chunk = raw_chunk  # no compression
+            # 3. Hash the RAW, not the compressed
+            raw_hash = hashlib.sha256(raw_chunk).digest()
+            metadata = ChunkMetadata(
+                index=i,
+                size=len(compressed_chunk),
+                hash=raw_hash,
+            )
+            yield metadata, compressed_chunk
 
 # FIXED: Standalone - no AEADContext dependency
 def reassemble_chunks_with_hashes(
