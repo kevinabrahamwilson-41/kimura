@@ -1,21 +1,21 @@
-MIT License
-
+Kevin Abraham Wilson Protocol Reference Implementation License
 Copyright (c) 2026 Kevin Abraham Wilson
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. GRANT OF LICENSE. Subject to the terms below, you are granted a non-exclusive, worldwide, royalty-free, perpetual license to:
+   - View and study the source code.
+   - Use, run, and integrate the Software in your applications.
+   - Distribute unmodified binary copies (with this license intact).
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. RESTRICTIONS. You may NOT:
+   - Modify, adapt, translate, or create derivative works of the Software, especially the core protocol design, specifications, or algorithms (the "Crown Jewel").
+   - Reverse engineer, decompile, or disassemble any part to extract or recreate the protocol design.
+   - Redistribute source code or modified versions.
+   - Remove or alter any copyright notices, disclaimers, or this license.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. OWNERSHIP. The Crown Jewel—exact protocol design, specifications, algorithms, and intellectual property—remains my exclusive property. This license grants no ownership or rights to it.
+
+4. NO WARRANTY. Provided "AS IS" without warranties. I am not liable for any damages.
+
+5. TERMINATION. Violations terminate this license immediately.
+
+For permission to modify or commercialize derivatives, contact kevin@example.com.
