@@ -2,7 +2,7 @@
 import time
 from pathlib import Path
 import statistics
-from kimura.crypto.mlkem import MLKEM
+from crypto.mlkem import MLKEM
 from crypto.signing import (
     ensure_keys_exist,
     load_mldsa_client_keys,
@@ -10,7 +10,7 @@ from crypto.signing import (
     sign_message,
     verify_message,
 )
-from kimura.crypto.mldsa import MLDSA
+from crypto.mldsa import MLDSA
 KEY_PATH = Path("./keys")
 RUNS = 10_000
 
