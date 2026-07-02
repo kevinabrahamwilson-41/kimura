@@ -5,7 +5,7 @@
 
 Kimura is a research‑oriented implementation of a **custom post‑quantum secure communication protocol**, designed to provide authenticated key exchange, encrypted transport, and secure file transfer over untrusted networks.  
 
-The system combines **NIST‑selected post‑quantum cryptographic primitives** (ML‑KEM‑768, ML‑DSA‑65) with a structured protocol design, including handshake negotiation, transcript binding, and a state‑driven secure channel. It is intended for experimentation, protocol design study, and post‑quantum cryptography research, not for production deployment.
+The system combines **NIST‑selected post‑quantum cryptographic primitives** (ML‑KEM‑768, ML‑DSA‑65) with a structured protocol design, including handshake negotiation, transcript binding, and a state‑driven secure channel. It is intended for experimentation, protocol design study, and post‑quantum cryptography research, **NOT for production deployment**.
 
 *Benchmark Hardware:* **Lenovo LOQ 15IRX9**  
 (**Intel Core i7-13650HX** 14-core/20-thread @ 2.6–4.9 GHz, **NVIDIA RTX 4060 Max-Q 8GB**)  
